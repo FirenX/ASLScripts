@@ -7,6 +7,10 @@ startup
     //-------------------------------------------------------------//
     settings.Add("stage", true, "Screen Transition Splits");
     settings.Add("noboss", false, "No Splitting before Bosses");
+    settings.Add("stagepractice", false, "Practicing Stages Mode");
+            settings.Add("onequarter", false, "Split at one quarter", "stagepractice");
+            settings.Add("twoquarter", false, "Split at half", "stagepractice");
+            settings.Add("threequarter", false, "Split at three quarters", "stagepractice");
     //-------------------------------------------------------------//
 
     vars.stopwatch = new Stopwatch();
@@ -96,7 +100,9 @@ startup
             new MemoryWatcher<byte>(wramOffset + 0x881) { Name = "substage" },
             new MemoryWatcher<byte>(wramOffset + 0x882) { Name = "total" },
             new MemoryWatcher<byte>(wramOffset + 0x137) { Name = "crankdone1" },
-            new MemoryWatcher<byte>(wramOffset + 0x138) { Name = "crankdone2" },
+            //new MemoryWatcher<byte>(wramOffset + 0x138) { Name = "crankdone2" },
+            new MemoryWatcher<byte>(wramOffset + 0xA8F) { Name = "stagelength" },
+            new MemoryWatcher<byte>(wramOffset + 0xC95) { Name = "stagepositionx" },
         };
     });
 
@@ -154,11 +160,22 @@ update
 
 start
 {
-    return vars.watchers["stage"].Current == 0x01 && vars.watchers["stage"].Old != 0x01;
+    if (settings["stagepractice"])
+    {
+        return vars.watchers["total"].Current > vars.watchers["total"].Old;
+    }
+    else
+    {
+        return vars.watchers["stage"].Current == 0x01 && vars.watchers["stage"].Old != 0x01;
+    }
 }
 
 reset
 {
+    if (settings["stagepractice"] && (vars.watchers["total"].Current < vars.watchers["total"].Old))
+        return true;
+    if ((vars.watchers["stage"].Current > 0x06) || (vars.watchers["substage"].Current > 0x06) || (vars.watchers["total"].Current > 0x20))
+        return true;
 }
 
 split
@@ -166,6 +183,7 @@ split
     var result = false;
     var _stage = 0;
     var _substage = 0;
+    var _stagelength = vars.watchers["stagelength"].Current;
     if (settings["stage"] && vars.watchers["total"].Old != 0x0F)
         {
         result = (vars.watchers["substage"].Current > vars.watchers["substage"].Old) || ((vars.watchers["stage"].Current > vars.watchers["stage"].Old) && (vars.watchers["substage"].Old != 0));
@@ -192,8 +210,37 @@ split
                 }
             }
         }
-    if ((vars.watchers["total"].Current == 0x0F) && (vars.watchers["crankdone1"].Old < 0x09) && (vars.watchers["crankdone1"].Current == 0x09) && (vars.watchers["crankdone2"].Current == 0x00))
+    if ((vars.watchers["total"].Current == 0x0F) && (vars.watchers["crankdone1"].Current > 0x07))
         result = true;
+    if (settings["stagepractice"])
+    {
+        if (settings["onequarter"] && !result)
+        {
+            if (vars.watchers["stagepositionx"].Current > vars.watchers["stagepositionx"].Old)
+            {
+                if (vars.watchers["stagepositionx"].Current == ((_stagelength * 1) / 4))
+                    result = true;
+            }
+        }
+        if (settings["twoquarter"] && !result)
+        {
+            if (vars.watchers["stagepositionx"].Current > vars.watchers["stagepositionx"].Old)
+            {
+                if (vars.watchers["stagepositionx"].Current == ((_stagelength * 2) / 4))
+                    result = true;
+            }
+        }
+        if (settings["threequarter"] && !result)
+        {
+            if (vars.watchers["stagepositionx"].Current > vars.watchers["stagepositionx"].Old)
+            {
+                if (vars.watchers["stagepositionx"].Current == ((_stagelength * 3) / 4))
+                    result = true;
+            }
+        }
+    }
+    if ((vars.watchers["stage"].Current > 0x06) || (vars.watchers["substage"].Current > 0x06) || (vars.watchers["total"].Current > 0x20))
+        result = false;
     if (result)
         return true;
 }
